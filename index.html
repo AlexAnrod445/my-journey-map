@@ -1,0 +1,193 @@
+
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Journey Map Bangladesh</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#061827;color:white;font-family:Arial,sans-serif}
+header{text-align:center;padding:20px;background:#092c42}
+h1{color:#37e5a5;margin:5px}
+p{color:#c4d9e7}
+main{padding:15px;max-width:1000px;margin:auto}
+.card{background:#0b2b40;padding:15px;border-radius:15px;margin-bottom:15px}
+input,button{padding:12px;border-radius:8px;border:0;font-size:15px}
+input{width:100%;background:#eaf7ff;margin-bottom:8px}
+button{background:#20d9a0;color:#052638;font-weight:bold;cursor:pointer;margin:3px}
+#map{height:420px;border-radius:12px}
+#districts{display:flex;flex-wrap:wrap;gap:4px}
+#districts button{font-size:12px}
+#places button{background:#173f57;color:white}
+.download{width:100%;padding:15px;font-size:17px}
+small{color:#bdd6e5}
+</style>
+</head>
+<body>
+<header>
+<h1>📍 My Journey Map</h1>
+<p>বাংলাদেশের ৬৪ জেলার ভ্রমণ ম্যাপ 🇧🇩</p>
+</header>
+<main>
+<div class="card">
+<h3>🔎 জায়গা খুঁজে যোগ করো</h3>
+<input id="search" placeholder="জেলার নাম লেখো...">
+<button onclick="searchPlace()">জায়গা খুঁজুন</button>
+<h3>বাংলাদেশের ৬৪টি জেলা</h3>
+<div id="districts"></div>
+</div>
+
+<div class="card">
+<h3>🗺️ তোমার ভ্রমণ ম্যাপ</h3>
+<div id="map"></div>
+<p>ম্যাপে ট্যাপ করেও নতুন জায়গা যোগ করতে পারো।</p>
+</div>
+
+<div class="card">
+<h3>✈️ আমার ভ্রমণের তালিকা</h3>
+<div id="places">এখনো কোনো জায়গা যোগ করোনি।</div>
+<p id="count">মোট জায়গা: ০</p>
+<input id="caption" value="আমার বাংলাদেশ ভ্রমণ" placeholder="ছবির শিরোনাম">
+<button class="download" onclick="downloadMap()">📥 ম্যাপের ছবি ডাউনলোড</button>
+</div>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const districts=[
+'ঢাকা','ফরিদপুর','গাজীপুর','গোপালগঞ্জ','কিশোরগঞ্জ','মাদারীপুর','মানিকগঞ্জ','মুন্সিগঞ্জ','নারায়ণগঞ্জ','নরসিংদী','রাজবাড়ী','শরীয়তপুর','টাঙ্গাইল',
+'বগুড়া','জয়পুরহাট','নওগাঁ','নাটোর','চাঁপাইনবাবগঞ্জ','পাবনা','রাজশাহী','সিরাজগঞ্জ',
+'দিনাজপুর','গাইবান্ধা','কুড়িগ্রাম','লালমনিরহাট','নীলফামারী','পঞ্চগড়','রংপুর','ঠাকুরগাঁও',
+'বাগেরহাট','চুয়াডাঙ্গা','যশোর','ঝিনাইদহ','খুলনা','কুষ্টিয়া','মাগুরা','মেহেরপুর','নড়াইল','সাতক্ষীরা',
+'বরগুনা','বরিশাল','ভোলা','ঝালকাঠি','পটুয়াখালী','পিরোজপুর',
+'বান্দরবান','ব্রাহ্মণবাড়িয়া','চাঁদপুর','চট্টগ্রাম','কুমিল্লা','কক্সবাজার','ফেনী','খাগড়াছড়ি','লক্ষ্মীপুর','নোয়াখালী','রাঙ্গামাটি',
+'হবিগঞ্জ','মৌলভীবাজার','সুনামগঞ্জ','সিলেট',
+'জামালপুর','ময়মনসিংহ','নেত্রকোনা','শেরপুর'
+];
+
+const map=L.map('map').setView([23.7,90.35],7);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+attribution:'© OpenStreetMap contributors'
+}).addTo(map);
+
+let visited=[];
+let markers=[];
+let line=null;
+
+const districtBox=document.getElementById('districts');
+districts.forEach(name=>{
+ const b=document.createElement('button');
+ b.textContent=name;
+ b.onclick=()=>addDistrict(name);
+ districtBox.appendChild(b);
+});
+
+async function addDistrict(name){
+ if(visited.some(p=>p.name===name)){
+  alert('এই জেলা আগেই যোগ করা হয়েছে!');
+  return;
+ }
+ try{
+  const url='https://nominatim.openstreetmap.org/search?format=json&limit=1&country=Bangladesh&q='+encodeURIComponent(name+' district');
+  const response=await fetch(url);
+  const data=await response.json();
+  if(!data.length){
+   alert('জায়গাটি পাওয়া যায়নি। আবার চেষ্টা করো।');
+   return;
+  }
+  addPoint(name,+data[0].lat,+data[0].lon);
+ }catch(e){
+  alert('ইন্টারনেট চালু করে আবার চেষ্টা করো।');
+ }
+}
+
+async function searchPlace(){
+ const name=document.getElementById('search').value.trim();
+ if(!name)return alert('আগে জায়গার নাম লেখো।');
+ await addDistrict(name);
+}
+
+function addPoint(name,lat,lon){
+ const marker=L.marker([lat,lon]).addTo(map).bindPopup(name);
+ visited.push({name,lat,lon});
+ markers.push(marker);
+ map.setView([lat,lon],8);
+ update();
+}
+
+function update(){
+ document.getElementById('places').innerHTML='';
+ visited.forEach((p,i)=>{
+  const b=document.createElement('button');
+  b.textContent='📍 '+p.name+' ✕';
+  b.onclick=()=>{
+   map.removeLayer(markers[i]);
+   visited.splice(i,1);
+   markers.splice(i,1);
+   update();
+  };
+  document.getElementById('places').appendChild(b);
+ });
+ if(!visited.length){
+  document.getElementById('places').textContent='এখনো কোনো জায়গা যোগ করোনি।';
+ }
+ document.getElementById('count').textContent='মোট জায়গা: '+visited.length;
+ if(line)map.removeLayer(line);
+ if(visited.length>1){
+  line=L.polyline(visited.map(p=>[p.lat,p.lon]),{
+   color:'#20d9a0',weight:4
+  }).addTo(map);
+ }
+}
+
+map.on('click',e=>{
+ const name=prompt('এই জায়গার নাম কী?');
+ if(name&&name.trim()){
+  addPoint(name.trim(),e.latlng.lat,e.latlng.lng);
+ }
+});
+
+function downloadMap(){
+ if(!visited.length)return alert('আগে কিছু জায়গা যোগ করো!');
+ const c=document.createElement('canvas');
+ c.width=1000;c.height=1200;
+ const x=c.getContext('2d');
+ const g=x.createLinearGradient(0,0,1000,1200);
+ g.addColorStop(0,'#063b50');g.addColorStop(1,'#061827');
+ x.fillStyle=g;x.fillRect(0,0,1000,1200);
+ x.fillStyle='#37e5a5';x.font='bold 48px sans-serif';
+ x.fillText('MY JOURNEY MAP',55,90);
+ x.fillStyle='white';x.font='32px sans-serif';
+ x.fillText(document.getElementById('caption').value,55,155);
+ x.fillStyle='#c9e7f3';x.font='26px sans-serif';
+ x.fillText('BANGLADESH 🇧🇩',55,210);
+ x.strokeStyle='#20d9a0';x.lineWidth=5;
+ x.beginPath();
+ visited.forEach((p,i)=>{
+  const px=100+(i%4)*225;
+  const py=290+Math.floor(i/4)*90;
+  if(i===0)x.moveTo(px,py);else x.lineTo(px,py);
+ });
+ x.stroke();
+ visited.forEach((p,i)=>{
+  const px=100+(i%4)*225;
+  const py=290+Math.floor(i/4)*90;
+  x.fillStyle='#20d9a0';
+  x.beginPath();x.arc(px,py,18,0,Math.PI*2);x.fill();
+  x.fillStyle='white';x.font='20px sans-serif';
+  x.fillText((i+1)+'. '+p.name,px-40,py+42);
+ });
+ x.fillStyle='#37e5a5';x.font='24px sans-serif';
+ x.fillText('Places visited: '+visited.length,55,1120);
+ x.fillStyle='white';x.font='20px sans-serif';
+ x.fillText('Made with My Journey Map',55,1160);
+ const a=document.createElement('a');
+ a.download='my-journey-map.png';
+ a.href=c.toDataURL('image/png');
+ a.click();
+}
+</script>
+</body>
+  </html>
